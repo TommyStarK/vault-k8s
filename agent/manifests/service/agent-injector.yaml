@@ -1,0 +1,19 @@
+---
+# Source: vault-agent-injector/templates/service/agent-injector.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault-agent-injector-svc
+  namespace: default
+  labels:
+    app.kubernetes.io/name: vault-agent-injector
+    app.kubernetes.io/instance: vault
+spec:
+  selector:
+    app.kubernetes.io/name: vault-agent-injector
+    app.kubernetes.io/instance: vault
+    component: webhook
+  ports:
+  - name: https
+    port: 443
+    targetPort: 8080

@@ -1,1 +1,6 @@
 namespace: default
+environment: test
+logLevel: debug
+version: "1.2.1"
+vaultAddr: "https://vault.cluster.com"
+vaultVersion: "1.13.1"
