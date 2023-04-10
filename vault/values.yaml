@@ -7,7 +7,7 @@ ingress:
     mountPath: /vault/tls
 
 log:
-  level: debug
+  level: info
 
 server:
   maxRequestDuration: 30s

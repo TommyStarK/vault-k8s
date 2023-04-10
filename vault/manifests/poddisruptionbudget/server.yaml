@@ -1,6 +1,6 @@
 ---
 # Source: vault-cluster/templates/poddisruptionbudget/server.yaml
-apiVersion: policy/v1beta1
+apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: vault
@@ -9,7 +9,7 @@ metadata:
     app.kubernetes.io/name: vault
     app.kubernetes.io/instance: vault
 spec:
-  maxUnavailable: 1
+  maxUnavailable: 2
   selector:
     matchLabels:
       app.kubernetes.io/name: vault

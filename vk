@@ -69,7 +69,14 @@ delete() {
 	read -a targets <<< "$TARGET"
 
 	for target in "${targets[@]}"; do
-		helm uninstall $target
+		local chart="${charts[$target]}"
+
+		if [ -z "$chart" ]; then
+			__info "unknown template: $target"
+			exit 1
+		else
+			helm uninstall $chart
+		fi
 	done
 }
 

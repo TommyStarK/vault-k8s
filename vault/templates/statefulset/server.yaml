@@ -1,17 +1,15 @@
-{{ range $instancecount, $e := until (.Values.server.replicas|int) }}
----
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: vault-{{ $instancecount }}
-  namespace: {{ $.Values.namespace }}
+  name: vault
+  namespace: {{ .Values.namespace }}
   labels:
     app.kubernetes.io/name: vault
     app.kubernetes.io/instance: vault
 spec:
   serviceName: vault-internal
   podManagementPolicy: Parallel
-  replicas: 1
+  replicas: {{ .Values.server.replicas }}
   updateStrategy:
     type: OnDelete
   selector:
@@ -19,6 +17,18 @@ spec:
       app.kubernetes.io/name: vault
       app.kubernetes.io/instance: vault
       component: server
+{{ if eq .Values.storage.enable true }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        storageClassName: {{ .Values.storage.className }}
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: {{ .Values.storage.size }}
+{{ end }}
   template:
     metadata:
       labels:
@@ -28,13 +38,12 @@ spec:
     spec:
       serviceAccountName: vault
       terminationGracePeriodSeconds: 10
+      hostNetwork: false
       securityContext:
         runAsNonRoot: true
         runAsGroup: 1000
         runAsUser: 100
-        fsGroup: 100
-        capabilities:
-          add: ["IPC_LOCK"]
+        fsGroup: 1000
       # affinity:
       #   podAntiAffinity:
       #     requiredDuringSchedulingIgnoredDuringExecution:
@@ -48,24 +57,20 @@ spec:
         - name: config
           configMap:
             name: server-config
-{{ if eq $.Values.storage.enable false }}
+{{ if eq .Values.storage.enable false }}
         - name: data
           emptyDir: {}
-{{ else }}
-        - name: data
-          persistentVolumeClaim:
-            claimName: vault-{{ $instancecount }}-data
 {{ end }}
         - name: home
           emptyDir: {}
-{{ if eq $.Values.ingress.enable true }}
+{{ if eq .Values.ingress.enable true }}
         - name: tls
           secret:
             secretName: vault-tls
 {{ end }}
       containers:
         - name: vault
-          image: hashicorp/vault:{{ $.Values.server.version }}
+          image: hashicorp/vault:{{ .Values.server.version }}
           imagePullPolicy: IfNotPresent
           command:
           - "/bin/sh"
@@ -114,7 +119,11 @@ spec:
             - name: HOME
               value: "/home/vault"
             - name: VAULT_LOG_LEVEL
-              value: {{ $.Values.log.level }}
+              value: {{ .Values.log.level }}
+            - name: VAULT_RAFT_NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           ports:
             - containerPort: 8200
               name: http
@@ -156,17 +165,19 @@ spec:
             periodSeconds: 5
             successThreshold: 1
             timeoutSeconds: 3
-{{ if eq $.Values.server.setresources true }}
+{{ if eq .Values.server.setresources true }}
           resources:
             limits:
-              cpu: {{ $.Values.server.resources.cpu }}
-              memory: {{ $.Values.server.resources.memory }}
+              cpu: {{ .Values.server.resources.cpu }}
+              memory: {{ .Values.server.resources.memory }}
             requests:
-              cpu: {{ $.Values.server.resources.cpu }}
-              memory: {{ $.Values.server.resources.memory }}
+              cpu: {{ .Values.server.resources.cpu }}
+              memory: {{ .Values.server.resources.memory }}
 {{ end }}
           securityContext:
             allowPrivilegeEscalation: false
+            # capabilities:
+            #   add: ["IPC_LOCK"]
           volumeMounts:
             - name: config
               mountPath: /vault/config
@@ -174,9 +185,8 @@ spec:
               mountPath: /vault/data
             - name: home
               mountPath: /home/vault
-{{ if eq $.Values.ingress.enable true }}
+{{ if eq .Values.ingress.enable true }}
             - name: tls
-              mountPath: {{ $.Values.ingress.tls.mountPath }}
+              mountPath: {{ .Values.ingress.tls.mountPath }}
               readOnly: true
-{{ end }}
 {{ end }}

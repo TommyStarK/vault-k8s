@@ -11,6 +11,10 @@ spec:
   # We want the servers to become available even if they're not ready
   # since this DNS is also used for join operations.
   publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/instance: vault
+    component: server
   ports:
     - name: http
       port: 8200
@@ -18,7 +22,3 @@ spec:
     - name: https-internal
       port: 8201
       targetPort: 8201
-  selector:
-    app.kubernetes.io/name: vault
-    app.kubernetes.io/instance: vault
-    component: server

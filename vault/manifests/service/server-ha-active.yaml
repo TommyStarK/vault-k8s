@@ -11,6 +11,11 @@ metadata:
     app.kubernetes.io/instance: vault
 spec:
   publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/instance: vault
+    component: server
+    vault-active: "true"
   ports:
     - name: http
       port: 8200
@@ -18,8 +23,3 @@ spec:
     - name: https-internal
       port: 8201
       targetPort: 8201
-  selector:
-    app.kubernetes.io/name: vault
-    app.kubernetes.io/instance: vault
-    component: server
-    vault-active: "true"

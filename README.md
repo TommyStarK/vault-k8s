@@ -45,7 +45,23 @@ Examples:
 
 ## Demo using GKE + Minikube
 
+To demonstrate how to use `vault-k8s`, we will use [GKE](https://cloud.google.com/kubernetes-engine) and [minikube](https://minikube.sigs.k8s.io/docs/). Feel free to use the cloud provider or whatever setup you want. Be aware of the required changes if you do so.
+
+For demo purposes, the Vault cluster will be deployed **without** enabling data persistence, pod resources, ingress. See the [production readiness](https://github.com/TommyStarK/vault-k8s#production-readiness) section for more details regarding these topics.
+
 ### Cluster setup
+
+First step, let's create the dedicated Kubernetes cluster for Vault.
+
+```bash
+❯ gcloud container clusters create vault-cluster --machine-type e2-standard-8
+```
+
+Once the cluster is ready, create the `vault` namespace
+
+```bash
+❯ kubectl create namespace vault
+```
 
 ```bash
 ❯ ./vk --setup-cluster --cluster=<CLUSTER_NAME>
@@ -54,8 +70,9 @@ Examples:
 Once the pods are deployed, each server needs to be unsealed to create the raft cluster.
 
 - On pod vault-0, init the first operator and keep safely the output (unseal keys + root token)
+
 ```bash
-$ kubectl exec -ti vault-0 -- vault operator init
+❯ kubectl exec -ti -n vault vault-0  -- vault operator init
 [...]
 Unseal Key 1: X/LOC5Rp3xqj5hXx0WNKP3NEP7iTjev7nZu4odFowEnc
 Unseal Key 2: +9w3RUIRQacDaA6OtQWpXinyzyxgI+ZnedyfM4WsK1VF
@@ -68,30 +85,34 @@ Initial Root Token: s.RHFKyNsi3gmXuki9D6MZIAn3
 ```
 
 - For each pod, it is necessary to provide 3 unseal keys
-```bash
-kubectl exec -ti vault-0 -- vault operator unseal X/...
-kubectl exec -ti vault-0 -- vault operator unseal +9...
-kubectl exec -ti vault-0 -- vault operator unseal X/...
 
-kubectl exec -ti vault-1 -- vault operator unseal X/...
+```bash
+kubectl exec -ti -n vault vault-0 -- vault operator unseal X/...
+kubectl exec -ti -n vault vault-0 -- vault operator unseal +9...
+kubectl exec -ti -n vault vault-0 -- vault operator unseal X/...
+
+kubectl exec -ti -n vault vault-1 -- vault operator unseal X/...
 [...]
 ```
 
 - Ensure the server is well unsealed for each one
+
 ```bash
-kubectl exec -ti vault-0 -- vault status
+❯ kubectl exec -ti -n vault vault-0 -- vault status
 ```
 
 Because of the auto_join configuration, the cluster will be automatically created once every vault server is unsealed.
 
 - Login into vault-0
+
 ```bash
-kubectl exec -ti vault-0 -- vault login s.RHFKyNsi3gmXuki9D6MZIAn3
+❯ kubectl exec -ti -n vault vault-0 -- vault login s.RHFKyNsi3gmXuki9D6MZIAn3
 ```
 
 - Verify the cluster state
+
 ```bash
-kubectl exec -ti vault-0 -- vault operator raft list-peers
+❯ kubectl exec -ti -n vault vault-0 -- vault operator raft list-peers
 ```
 
 > If a pod restart, the vault server will change to a sealed state again. Auto-unseal feature has to be enabled to avoid manual unsealing.
@@ -113,6 +134,12 @@ Assuming this is the first time your are setting up the Kubernetes cluster. We n
 > When speaking about "applicative" cluster we mean the cluster holding your application.
 
 > Production hardenning requirements for Vault require to have a dedicated infrastucture for it. Therefore we are configuring the vault agent to connect to our external dedicated HA Vault cluster.
+
+For demo purposes we will use `minikube` to deploy the agent
+
+```bash
+❯ minikube start
+```
 
 ```bash
 ❯ ./vk --deploy-agent --cluster=minikube
