@@ -1,0 +1,55 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: server-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/instance: vault
+data:
+  extraconfig-from-values.hcl: |-
+    disable_mlock = false # memory isn't swapped to disk
+    ui = true
+
+    default_max_request_duration = {{ .Values.server.maxRequestDuration }}
+
+{{ if eq .Values.ingress.enable true }}
+    listener "tcp" {
+      address = "[::]:8200"
+      cluster_address = "[::]:8201"
+      tls_cert_file = "{{ .Values.ingress.tls.mountPath }}/vault-server.crt"
+      tls_key_file  = "{{ .Values.ingress.tls.mountPath }}/vault-server.key"
+    }
+{{ else }}
+    listener "tcp" {
+      tls_disable = 1
+      address = "[::]:8200"
+      cluster_address = "[::]:8201"
+    }
+{{ end }}
+
+    storage "raft" {
+      path = "/vault/data"
+
+      retry_join {
+            leader_api_addr = "http://vault-0.vault-internal:8200"
+      }
+
+      retry_join {
+            leader_api_addr = "http://vault-1.vault-internal:8200"
+      }
+
+      retry_join {
+            leader_api_addr = "http://vault-2.vault-internal:8200"
+      }
+
+      retry_join {
+            leader_api_addr = "http://vault-3.vault-internal:8200"
+      }
+
+      retry_join {
+            leader_api_addr = "http://vault-4.vault-internal:8200"
+      }
+    }
+
+    service_registration "kubernetes" {}

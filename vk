@@ -1,0 +1,174 @@
+#!/usr/local/bin/bash
+
+declare -a binaries=(
+	"helm"
+	"kubectl"
+)
+
+declare -A charts=(
+	["agent"]="vault-agent-injector"
+	["vault"]="vault-cluster"
+)
+
+declare -a tools=(
+	"agent"
+	"vault"
+)
+
+__info() {
+	timestamp=`TZ=UTC date +%Y-%m-%d.%H:%M:%S`
+	echo "[$timestamp] $1"
+}
+
+__exit_on_failure() {
+	[ $? -ne 0 ] && __info $1 && exit 1
+}
+
+__k8s_context_handler() {
+	if [ ! -z "$CLUSTER" ]; then
+		kubectl config use-context $CLUSTER >/dev/null 2>&1
+		__exit_on_failure
+	fi
+}
+
+helm::template() {
+	local targets=()
+	if [ $# -eq 0 ]; then
+		targets=("${tools[@]}")
+	else
+		targets+=("$1")
+	fi
+
+	for target in "${targets[@]}"; do
+		local chart="${charts[$target]}"
+
+		if [ -z "$chart" ]; then
+			__info "unknown template: $target"
+			exit 1
+		else
+			__info "rendering chart template: $chart"
+
+			rm -rf ./$target/manifests
+			mkdir -p ./$target/manifests
+
+			tmp=$(mktemp -d -t chart-$target.XXXXXX)
+
+			helm template tmp ./$target/ --output-dir $tmp >/dev/null
+			__exit_on_failure
+
+			mv $tmp/$chart/templates/* ./$target/manifests/
+			rm -rf $tmp
+		fi
+	done
+}
+
+delete() {
+	__k8s_context_handler
+
+	IFS=','
+	read -a targets <<< "$TARGET"
+
+	for target in "${targets[@]}"; do
+		helm uninstall $target
+	done
+}
+
+deploy_agent() {
+	__k8s_context_handler
+	__info "deploy vault agent injector on cluster: $(kubectl config current-context)"
+	helm install --name-template vault-agent-injector agent -f agent/values.yaml
+}
+
+render_template() {
+	if [ -z "$TARGET" ]; then
+		helm::template
+	else
+		IFS=','
+		read -a targets <<< "$TARGET"
+
+		for target in "${targets[@]}"; do
+			helm::template $target
+		done
+	fi
+}
+
+setup_cluster() {
+	__k8s_context_handler
+
+	__info "setup vault server to cluster: $(kubectl config current-context)"
+	helm install --name-template vault-cluster vault -f vault/values.yaml
+}
+
+for binary in "${binaries[@]}"; do
+	! command -v $binary >/dev/null 2>&1 && __info "$binary not found" && exit 1
+done
+
+for i in "$@"; do
+	case $i in
+		-t=*|--target=*)
+		TARGET="${i#*=}"
+		shift # past argument=value
+		;;
+		-c=*|--cluster=*)
+		CLUSTER="${i#*=}"
+		shift # past argument=value
+		;;
+		--setup-cluster)
+		CLUSTER_SETUP=YES
+		shift # past argument with no value
+		;;
+		--deploy-agent)
+		AGENT_DEPLOY=YES
+		shift # past argument with no value
+		;;
+		--delete)
+		DELETE=YES
+		shift # past argument with no value
+		;;
+		--render-template)
+		RENDERING_TEMPLATE=YES
+		shift # past argument with no value
+		;;
+		-h|--help)
+		shift # past argument with no value
+		cat << EOF
+vk - Vault cluster toolkit for Kubernetes
+
+Usage: 	vk [options] --deploy-agent
+	vk [options] --render-template
+	vk [options] --setup-cluster
+	vk [options] --delete
+
+Options:
+	-c | --cluster    Specify Kubernetes cluster
+	-t | --target     Tools (agent, vault server)
+
+Examples:
+	# Render template for the Agent
+	./vk --render-template --target=agent
+	# Deploy Agent to minikube
+	./vk --deploy-agent --cluster=minikube
+	# Deploy the vault server cluster to Kubernetes cluster 'demo'
+	./vk --setup-cluster --cluster=demo
+	# Delete Agent and Vault from Kubernetes cluster 'demo'
+	./vk -c=demo -t=agent,vault --delete
+EOF
+		;;
+		-*|--*)
+		echo "Unknown option $i, see -h | --help flag"
+		exit 1
+		;;
+		*)
+		;;
+	esac
+done
+
+if [[ "$AGENT_DEPLOY" = "YES" ]]; then
+    deploy_agent
+elif [[ "$RENDERING_TEMPLATE" = "YES" ]]; then
+    render_template
+elif [[ "$CLUSTER_SETUP" = "YES" ]]; then
+    setup_cluster
+elif [[ "$DELETE" = "YES" ]]; then
+    delete
+fi

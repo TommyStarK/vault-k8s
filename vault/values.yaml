@@ -1,0 +1,24 @@
+namespace: vault
+
+ingress:
+  enable: false
+  host: vault.cluster.com
+  tls:
+    mountPath: /vault/tls
+
+log:
+  level: debug
+
+server:
+  maxRequestDuration: 30s
+  replicas: 5 # The Vault Reference Architecture recommends a 5 node cluster to ensure a minimum failure tolerance of at least 2.
+  setresources: false
+  resources:
+    cpu: 1
+    memory: 2Gi
+  version: "1.13.1"
+
+storage:
+  enable: false
+  className: standard-rwo
+  size: 10Gi

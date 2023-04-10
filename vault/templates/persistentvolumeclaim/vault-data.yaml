@@ -1,0 +1,17 @@
+{{ if eq .Values.storage.enable true }}
+{{ range $instancecount, $e := until (.Values.server.replicas|int) }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vault-{{ $instancecount }}-data
+  namespace: {{ $.Values.namespace }}
+spec:
+  storageClassName: {{ $.Values.storage.className }}
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ $.Values.storage.size }}
+{{ end }}
+{{ end }}
