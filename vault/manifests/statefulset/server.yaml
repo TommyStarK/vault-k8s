@@ -27,9 +27,9 @@ spec:
         app.kubernetes.io/instance: vault
         component: server
     spec:
+      hostNetwork: false
       serviceAccountName: vault
       terminationGracePeriodSeconds: 10
-      hostNetwork: false
       securityContext:
         runAsNonRoot: true
         runAsGroup: 1000
@@ -45,14 +45,13 @@ spec:
       #             component: server
       #         topologyKey: kubernetes.io/hostname
       volumes:
+        - name: home
+          emptyDir: {}
         - name: config
           configMap:
             name: server-config
 
         - name: data
-          emptyDir: {}
-
-        - name: home
           emptyDir: {}
 
       containers:
@@ -73,6 +72,12 @@ spec:
             [ -n "${RAFT_ADDR}" ] && sed -Ei "s|RAFT_ADDR|${RAFT_ADDR?}|g" /tmp/storageconfig.hcl;
             /usr/local/bin/docker-entrypoint.sh vault server -config=/tmp/storageconfig.hcl
           env:
+            - name: HOME
+              value: "/home/vault"
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
             - name: HOST_IP
               valueFrom:
                 fieldRef:
@@ -89,35 +94,31 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            - name: VAULT_ADDR
-              value: "http://127.0.0.1:8200"
-            - name: VAULT_API_ADDR
-              value: "http://$(POD_IP):8200"
             - name: SKIP_CHOWN
               value: "true"
             - name: SKIP_SETCAP
               value: "true"
-            - name: HOSTNAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
+            - name: VAULT_ADDR
+              value: "http://127.0.0.1:8200"
+            - name: VAULT_API_ADDR
+              value: "http://$(POD_IP):8200"
             - name: VAULT_CLUSTER_ADDR
               value: "https://$(HOSTNAME).vault-internal:8201"
-            - name: HOME
-              value: "/home/vault"
             - name: VAULT_LOG_LEVEL
-              value: info
+              value: debug
+            - name: VAULT_LOG_FORMAT
+              value: json
             - name: VAULT_RAFT_NODE_ID
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
           ports:
-            - containerPort: 8200
-              name: http
-            - containerPort: 8201
-              name: https-internal
-            - containerPort: 8202
-              name: http-rep
+            - name: http
+              containerPort: 8200
+            - name: https-internal
+              containerPort: 8201
+            - name: http-rep
+              containerPort: 8202
           lifecycle:
             # Vault container doesn't receive SIGTERM from Kubernetes
             # and after the grace period ends, Kube sends SIGKILL.  This
@@ -155,8 +156,6 @@ spec:
 
           securityContext:
             allowPrivilegeEscalation: false
-            # capabilities:
-            #   add: ["IPC_LOCK"]
           volumeMounts:
             - name: config
               mountPath: /vault/config

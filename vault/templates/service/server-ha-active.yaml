@@ -8,6 +8,9 @@ metadata:
     app.kubernetes.io/name: vault
     app.kubernetes.io/instance: vault
 spec:
+{{ if eq .Values.ingress.enable false }}
+  type: LoadBalancer
+{{ end }}
   publishNotReadyAddresses: true
   selector:
     app.kubernetes.io/name: vault

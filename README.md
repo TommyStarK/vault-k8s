@@ -25,6 +25,7 @@ vk - Vault toolkit for Kubernetes
 Usage: vk [options] --deploy-agent
 	vk [options] --render-template
 	vk [options] --setup-cluster
+	vk [options] --unseal
 	vk [options] --delete
 
 Options:
@@ -32,15 +33,16 @@ Options:
 	-t | --target     Tools (agent, vault server)
 
 Examples:
-	# Render template for the Vault agent injector
+	# Render template for the Agent
 	./vk --render-template --target=agent
-	# Deploy the Vault agent injector to minikube
+	# Deploy Agent to minikube
 	./vk --deploy-agent --cluster=minikube
-	# Deploy the 5 nodes Vault cluster to Kubernetes cluster 'demo'
+	# Deploy the vault server cluster to Kubernetes cluster 'demo'
 	./vk --setup-cluster --cluster=demo
+	# Unseal Vault nodes
+	./vk --unseal --cluster=demo
 	# Delete Agent and Vault from Kubernetes cluster 'demo'
 	./vk -c=demo -t=agent,vault --delete
-
 ```
 
 ## Demo using GKE + Minikube
@@ -63,13 +65,13 @@ Once the cluster is ready, create the `vault` namespace
 ❯ kubectl create namespace vault
 ```
 
+We can now proceed and deploy the Vault cluster
+
 ```bash
 ❯ ./vk --setup-cluster --cluster=<CLUSTER_NAME>
 ```
 
-Once the pods are deployed, each server needs to be unsealed to create the raft cluster.
-
-- On pod vault-0, init the first operator and keep safely the output (unseal keys + root token)
+Retrieve the unseal keys and root token
 
 ```bash
 ❯ kubectl exec -ti -n vault vault-0  -- vault operator init
@@ -84,38 +86,29 @@ Initial Root Token: s.RHFKyNsi3gmXuki9D6MZIAn3
 [...]
 ```
 
-- For each pod, it is necessary to provide 3 unseal keys
+Pick 3 out of 5 unseal keys and export them like below
 
 ```bash
-kubectl exec -ti -n vault vault-0 -- vault operator unseal X/...
-kubectl exec -ti -n vault vault-0 -- vault operator unseal +9...
-kubectl exec -ti -n vault vault-0 -- vault operator unseal X/...
-
-kubectl exec -ti -n vault vault-1 -- vault operator unseal X/...
+❯ export VAULT_UNSEAL_KEY_1="X/LOC5Rp3xqj5hXx0WNKP3NEP7iTjev7nZu4odFowEnc"
+❯ export VAULT_UNSEAL_KEY_2="+9w3RUIRQacDaA6OtQWpXinyzyxgI+ZnedyfM4WsK1VF"
+❯ export VAULT_UNSEAL_KEY_3="nLQzt/CbMiGMUkpuD6lKtqYfB+wL7a6H41jqNM8TtI0r"
 [...]
 ```
 
-- Ensure the server is well unsealed for each one
+Let's unseal all nodes of our Vault cluster
 
 ```bash
-❯ kubectl exec -ti -n vault vault-0 -- vault status
+❯ ./vk --unseal --cluster=<CLUSTER_NAME>
 ```
 
-Because of the auto_join configuration, the cluster will be automatically created once every vault server is unsealed.
-
-- Login into vault-0
+Finally let's check the cluster state
 
 ```bash
+# Login first with root token
 ❯ kubectl exec -ti -n vault vault-0 -- vault login s.RHFKyNsi3gmXuki9D6MZIAn3
-```
-
-- Verify the cluster state
-
-```bash
+# Now we can list the cluster members
 ❯ kubectl exec -ti -n vault vault-0 -- vault operator raft list-peers
 ```
-
-> If a pod restart, the vault server will change to a sealed state again. Auto-unseal feature has to be enabled to avoid manual unsealing.
 
 ### Agent injector
 

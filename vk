@@ -106,6 +106,41 @@ setup_cluster() {
 	helm install --name-template vault-cluster vault -f vault/values.yaml
 }
 
+unseal() {
+	if [ -z "$VAULT_UNSEAL_KEY_1" ] || [ -z "$VAULT_UNSEAL_KEY_2" ] || [ -z "$VAULT_UNSEAL_KEY_3" ]; then
+		__info "environment variables: \$VAULT_UNSEAL_KEY_1, \$VAULT_UNSEAL_KEY_2, \$VAULT_UNSEAL_KEY_3 must be set"
+		exit 1
+	fi
+
+	__k8s_context_handler
+
+	kubectl exec -ti -n vault vault-0 -- vault operator unseal $VAULT_UNSEAL_KEY_1
+	kubectl exec -ti -n vault vault-0 -- vault operator unseal $VAULT_UNSEAL_KEY_2
+	kubectl exec -ti -n vault vault-0 -- vault operator unseal $VAULT_UNSEAL_KEY_3
+	sleep 0.5
+
+
+	kubectl exec -ti -n vault vault-1 -- vault operator unseal $VAULT_UNSEAL_KEY_1
+	kubectl exec -ti -n vault vault-1 -- vault operator unseal $VAULT_UNSEAL_KEY_2
+	kubectl exec -ti -n vault vault-1 -- vault operator unseal $VAULT_UNSEAL_KEY_3
+	sleep 0.5
+
+	kubectl exec -ti -n vault vault-2 -- vault operator unseal $VAULT_UNSEAL_KEY_1
+	kubectl exec -ti -n vault vault-2 -- vault operator unseal $VAULT_UNSEAL_KEY_2
+	kubectl exec -ti -n vault vault-2 -- vault operator unseal $VAULT_UNSEAL_KEY_3
+	sleep 0.5
+
+
+	kubectl exec -ti -n vault vault-3 -- vault operator unseal $VAULT_UNSEAL_KEY_1
+	kubectl exec -ti -n vault vault-3 -- vault operator unseal $VAULT_UNSEAL_KEY_2
+	kubectl exec -ti -n vault vault-3 -- vault operator unseal $VAULT_UNSEAL_KEY_3
+	sleep 0.5
+
+	kubectl exec -ti -n vault vault-4 -- vault operator unseal $VAULT_UNSEAL_KEY_1
+	kubectl exec -ti -n vault vault-4 -- vault operator unseal $VAULT_UNSEAL_KEY_2
+	kubectl exec -ti -n vault vault-4 -- vault operator unseal $VAULT_UNSEAL_KEY_3
+}
+
 for binary in "${binaries[@]}"; do
 	! command -v $binary >/dev/null 2>&1 && __info "$binary not found" && exit 1
 done
@@ -136,14 +171,19 @@ for i in "$@"; do
 		RENDERING_TEMPLATE=YES
 		shift # past argument with no value
 		;;
+		--unseal)
+		UNSEAL=YES
+		shift # past argument with no value
+		;;
 		-h|--help)
 		shift # past argument with no value
 		cat << EOF
-vk - Vault cluster toolkit for Kubernetes
+vk - Vault toolkit for Kubernetes
 
 Usage: 	vk [options] --deploy-agent
 	vk [options] --render-template
 	vk [options] --setup-cluster
+	vk [options] --unseal
 	vk [options] --delete
 
 Options:
@@ -157,6 +197,8 @@ Examples:
 	./vk --deploy-agent --cluster=minikube
 	# Deploy the vault server cluster to Kubernetes cluster 'demo'
 	./vk --setup-cluster --cluster=demo
+	# Unseal Vault nodes
+	./vk --unseal --cluster=demo
 	# Delete Agent and Vault from Kubernetes cluster 'demo'
 	./vk -c=demo -t=agent,vault --delete
 EOF
@@ -178,4 +220,6 @@ elif [[ "$CLUSTER_SETUP" = "YES" ]]; then
     setup_cluster
 elif [[ "$DELETE" = "YES" ]]; then
     delete
+elif [[ "$UNSEAL" = "YES" ]]; then
+    unseal
 fi
