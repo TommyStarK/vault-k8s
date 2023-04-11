@@ -17,11 +17,11 @@ spec:
         vault.hashicorp.com/role: 'vault-agent-injector'
         # vault.hashicorp.com/ca-cert: /vault/tls/ca.crt
         # vault.hashicorp.com/tls-secret: intermediate-ca-certificate
-        vault.hashicorp.com/agent-inject-secret-env: 'secret/demo'
+        vault.hashicorp.com/agent-inject-secret-env: 'demo'
         vault.hashicorp.com/agent-inject-template-env: |
-          {{ with secret "secret/demo/dummy" }}
+          {{ with secret "demo/dummy" }}
             {{ range $key, $value := .Data.data }}
-              export {{ $key }}={{ $value }}
+              export {{ $key }}="{{ $value }}"
             {{- end }}
           {{- end }}
     spec:
@@ -30,4 +30,4 @@ spec:
         - name: demo
           image: alpine:latest
           imagePullPolicy: IfNotPresent
-          command: ["/bin/sh",  "-c", "source /vault/secrets/env && sleep infinity"]
+          command: ["/bin/sh",  "-c", "source /vault/secrets/env && env | grep DEMO_SECRET && sleep infinity"]
