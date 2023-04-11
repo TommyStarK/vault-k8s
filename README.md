@@ -315,8 +315,8 @@ DEMO_SECRET=this is secret
 - remove clusters
 
 ```bash
-❯ gcloud container clusters delete vault-cluster
 ❯ gcloud container clusters delete app-cluster
+❯ gcloud container clusters delete vault-cluster
 ```
 
 ## Production readiness
