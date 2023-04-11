@@ -42,7 +42,7 @@ spec:
             - name: AGENT_INJECT_LOG_LEVEL
               value: debug
             - name: AGENT_INJECT_VAULT_ADDR
-              value: "https:/vault.cluster.com"
+              value: "https://vault.cluster.com"
             - name: AGENT_INJECT_VAULT_AUTH_PATH
               value: auth/demo
             - name: AGENT_INJECT_VAULT_IMAGE

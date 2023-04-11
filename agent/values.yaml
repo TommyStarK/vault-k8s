@@ -7,5 +7,5 @@ log:
   format: json
 
 vault:
-  endpoint: "https:/vault.cluster.com"
+  endpoint: "https://vault.cluster.com"
   version: "1.13.1"
