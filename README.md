@@ -101,13 +101,36 @@ Let's unseal all nodes of our Vault cluster
 ❯ ./vk --unseal --cluster=<CLUSTER_NAME>
 ```
 
+:warning: Some nodes may restart in between, if it happens, run the unseal command again.
+
 Finally let's check the cluster state
 
 ```bash
 # Login first with root token
 ❯ kubectl exec -ti -n vault vault-0 -- vault login s.RHFKyNsi3gmXuki9D6MZIAn3
+
 # Now we can list the cluster members
 ❯ kubectl exec -ti -n vault vault-0 -- vault operator raft list-peers
+Node       Address                        State       Voter
+----       -------                        -----       -----
+vault-0    vault-0.vault-internal:8201    leader      true
+vault-2    vault-2.vault-internal:8201    follower    true
+vault-3    vault-3.vault-internal:8201    follower    true
+vault-4    vault-4.vault-internal:8201    follower    true
+vault-1    vault-1.vault-internal:8201    follower    true
+```
+
+You can access the Vault UI by running the following command
+
+```bash
+❯ open "http://$(kubectl get -n vault service vault-active| awk 'NR>1 {print $4}'):8200/ui"
+```
+
+At that point the cluster is up, running and unsealed, the only thing we need is to retrieve the endpoint to communicate with our Cluster
+
+```bash
+❯ kubectl get -n vault service vault-active| awk 'NR>1 {print $4}'
+34.91.249.155
 ```
 
 ### Agent injector
@@ -134,23 +157,60 @@ For demo purposes we will use `minikube` to deploy the agent
 ❯ minikube start
 ```
 
+Once the cluster is ready, create the `vault` namespace
+
+```bash
+❯ kubectl create namespace vault
+```
+
+Before deploying the agent, we must update its [values.yaml] with the endpoint of the Vault cluster. This way the agent will be able to communicate with it. For demo purposes, the Vault cluster has been deployed without enabling Ingress so we use the service LoadBalancer IP.
+We retrieved it just before, we can update the `vaultAddr` value with `http://34.91.249.155:8200`.
+
+Once it's done, render the template of the agent
+
+```bash
+❯ ./vk --render-template --target=agent
+```
+
+We can now proceed and deploy the Vault agent injector
+
 ```bash
 ❯ ./vk --deploy-agent --cluster=minikube
 ```
 
-The Vault agent injector is now running, we need a few more steps
-before switching to the vault side.
+The Vault agent injector is now running, we need a few more steps before switching to the vault side.
+
+In Kubernetes 1.24+, the token is not created automatically, and you must create it explicitly.
+
+```bash
+❯ cat > vault-secret.yaml <<EOF
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/service-account-token
+metadata:
+  name: vault-token-g955r
+  namespace: vault
+  annotations:
+    kubernetes.io/service-account.name: vault-agent-injector
+EOF
+```
+
+Apply the file to create the secret
+
+```bash
+❯ kubectl apply -f vault-secret.yaml
+```
 
 - Retrieve the token name bound to the vault agent service account
 
 ```bash
-❯ VAULT_HELM_SECRET_NAME=$(kubectl get secrets -n xceed --output=json | jq -r '.items[].metadata | select(.name|startswith("vault-agent-injector-token-")).name')
+❯ VAULT_HELM_SECRET_NAME=$(kubectl get secrets -n vault --output=json | jq -r '.items[].metadata | select(.name|startswith("vault-token-")).name')
 ```
 
 - Retrieve the value of this token
 
 ```bash
-❯ TOKEN_REVIEW_JWT=$(kubectl get secret -n xceed $VAULT_HELM_SECRET_NAME --output='go-template={{ .data.token }}' | base64 --decode)
+❯ TOKEN_REVIEW_JWT=$(kubectl get secret -n vault $VAULT_HELM_SECRET_NAME --output='go-template={{ .data.token }}' | base64 --decode)
 ```
 
 - Retrieve the Kubernetes host
