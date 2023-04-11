@@ -22,8 +22,6 @@ spec:
         app.kubernetes.io/name: vault-agent-injector
         app.kubernetes.io/instance: vault
         component: webhook
-        env: test
-        type: vault-agent
     spec:
       serviceAccountName: vault-agent-injector
       hostNetwork: false
@@ -34,7 +32,7 @@ spec:
       containers:
         - name: sidecar-injector
           image: hashicorp/vault-k8s:1.2.1
-          imagePullPolicy: "IfNotPresent"
+          imagePullPolicy: IfNotPresent
           args:
             - agent-inject
             - 2>&1
@@ -44,9 +42,9 @@ spec:
             - name: AGENT_INJECT_LOG_LEVEL
               value: debug
             - name: AGENT_INJECT_VAULT_ADDR
-              value: "https://vault.cluster.com"
+              value: "https:/vault.cluster.com"
             - name: AGENT_INJECT_VAULT_AUTH_PATH
-              value: auth/test
+              value: auth/demo
             - name: AGENT_INJECT_VAULT_IMAGE
               value: hashicorp/vault:1.13.1
             - name: AGENT_INJECT_TLS_AUTO
@@ -54,7 +52,7 @@ spec:
             - name: AGENT_INJECT_TLS_AUTO_HOSTS
               value: vault-agent-injector-svc,vault-agent-injector-svc.vault,vault-agent-injector-svc.vault.svc
             - name: AGENT_INJECT_LOG_FORMAT
-              value: standard
+              value: json
             - name: AGENT_INJECT_REVOKE_ON_SHUTDOWN
               value: "false"
             - name: AGENT_INJECT_CPU_REQUEST

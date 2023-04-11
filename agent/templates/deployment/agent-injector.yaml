@@ -20,8 +20,6 @@ spec:
         app.kubernetes.io/name: vault-agent-injector
         app.kubernetes.io/instance: vault
         component: webhook
-        env: {{ .Values.environment }}
-        type: vault-agent
     spec:
       serviceAccountName: vault-agent-injector
       hostNetwork: false
@@ -32,7 +30,7 @@ spec:
       containers:
         - name: sidecar-injector
           image: hashicorp/vault-k8s:{{ .Values.version }}
-          imagePullPolicy: "IfNotPresent"
+          imagePullPolicy: IfNotPresent
           args:
             - agent-inject
             - 2>&1
@@ -40,19 +38,19 @@ spec:
             - name: AGENT_INJECT_LISTEN
               value: :8080
             - name: AGENT_INJECT_LOG_LEVEL
-              value: {{ .Values.logLevel }}
+              value: {{ .Values.log.level }}
             - name: AGENT_INJECT_VAULT_ADDR
-              value: "{{ .Values.vaultAddr }}"
+              value: "{{ .Values.vault.endpoint }}"
             - name: AGENT_INJECT_VAULT_AUTH_PATH
               value: auth/{{ .Values.environment }}
             - name: AGENT_INJECT_VAULT_IMAGE
-              value: hashicorp/vault:{{ .Values.vaultVersion }}
+              value: hashicorp/vault:{{ .Values.vault.version }}
             - name: AGENT_INJECT_TLS_AUTO
               value: vault-agent-injector-cfg-{{ .Values.namespace }}
             - name: AGENT_INJECT_TLS_AUTO_HOSTS
               value: vault-agent-injector-svc,vault-agent-injector-svc.{{ .Values.namespace }},vault-agent-injector-svc.{{ .Values.namespace }}.svc
             - name: AGENT_INJECT_LOG_FORMAT
-              value: standard
+              value: {{ .Values.log.format }}
             - name: AGENT_INJECT_REVOKE_ON_SHUTDOWN
               value: "false"
             - name: AGENT_INJECT_CPU_REQUEST

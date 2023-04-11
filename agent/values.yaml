@@ -1,6 +1,11 @@
 namespace: vault
-environment: test
-logLevel: debug
+environment: demo
 version: "1.2.1"
-vaultAddr: "https://vault.cluster.com"
-vaultVersion: "1.13.1"
+
+log:
+  level: debug
+  format: json
+
+vault:
+  endpoint: "https:/vault.cluster.com"
+  version: "1.13.1"
