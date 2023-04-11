@@ -45,9 +45,9 @@ Examples:
 	./vk -c=demo -t=agent,vault --delete
 ```
 
-## Demo using GKE + Minikube
+## Demo using GKE
 
-To demonstrate how to use `vault-k8s`, we will use [GKE](https://cloud.google.com/kubernetes-engine) and [minikube](https://minikube.sigs.k8s.io/docs/). Feel free to use the cloud provider or whatever setup you want. Be aware of the required changes if you do so.
+To demonstrate how to use `vault-k8s`, we will use [GKE](https://cloud.google.com/kubernetes-engine). Feel free to use the cloud provider or whatever setup you want. Be aware of the required changes if you do so.
 
 For demo purposes, the Vault cluster will be deployed **without** enabling data persistence, pod resources, ingress. See the [production readiness](https://github.com/TommyStarK/vault-k8s#production-readiness) section for more details regarding these topics.
 
@@ -68,7 +68,7 @@ Once the cluster is ready, create the `vault` namespace
 We can now proceed and deploy the Vault cluster
 
 ```bash
-❯ ./vk --setup-cluster --cluster=<CLUSTER_NAME>
+❯ ./vk --setup-cluster --cluster=<VAULT_CLUSTER_NAME>
 ```
 
 Retrieve the unseal keys and root token
@@ -98,7 +98,7 @@ Pick 3 out of 5 unseal keys and export them like below
 Let's unseal all nodes of our Vault cluster
 
 ```bash
-❯ ./vk --unseal --cluster=<CLUSTER_NAME>
+❯ ./vk --unseal --cluster=<VAULT_CLUSTER_NAME>
 ```
 
 :warning: Some nodes may restart in between, if it happens, run the unseal command again.
@@ -151,10 +151,10 @@ Assuming this is the first time your are setting up the Kubernetes cluster. We n
 
 > Production hardenning requirements for Vault require to have a dedicated infrastucture for it. Therefore we are configuring the vault agent to connect to our external dedicated HA Vault cluster.
 
-For demo purposes we will use `minikube` to deploy the agent
+Let's create the Kubernetes app cluster
 
 ```bash
-❯ minikube start
+❯ gcloud container clusters create app-cluster --machine-type e2-small
 ```
 
 Once the cluster is ready, create the `vault` namespace
@@ -164,7 +164,7 @@ Once the cluster is ready, create the `vault` namespace
 ```
 
 Before deploying the agent, we must update its [values.yaml] with the endpoint of the Vault cluster. This way the agent will be able to communicate with it. For demo purposes, the Vault cluster has been deployed without enabling Ingress so we use the service LoadBalancer IP.
-We retrieved it just before, we can update the `vaultAddr` value with `http://34.91.249.155:8200`.
+We retrieved it just before, we can update the `vault.endpoint` value with `http://34.91.249.155:8200`.
 
 Once it's done, render the template of the agent
 
@@ -175,31 +175,10 @@ Once it's done, render the template of the agent
 We can now proceed and deploy the Vault agent injector
 
 ```bash
-❯ ./vk --deploy-agent --cluster=minikube
+❯ ./vk --deploy-agent --cluster=<APP_CLUSTER_NAME>
 ```
 
 The Vault agent injector is now running, we need a few more steps before switching to the vault side.
-
-In Kubernetes 1.24+, the token is not created automatically, and you must create it explicitly.
-
-```bash
-❯ cat > vault-secret.yaml <<EOF
-apiVersion: v1
-kind: Secret
-type: kubernetes.io/service-account-token
-metadata:
-  name: vault-token-g955r
-  namespace: vault
-  annotations:
-    kubernetes.io/service-account.name: vault-agent-injector
-EOF
-```
-
-Apply the file to create the secret
-
-```bash
-❯ kubectl apply -f vault-secret.yaml
-```
 
 - Retrieve the token name bound to the vault agent service account
 
@@ -235,6 +214,9 @@ We must now, configure the Vault cluster to authorize our "applicative" cluster 
 ```
 
 - We enable the auth Kubernetes method for a specific `<ENV>`. This way we could configure several Kubernetes clusters to access our Vault.
+For demo purposes we will use the path `demo`, Feel free to set what you want.
+
+> We are going to replace `<ENV>` by `demo` in all following commands, If you wish to set another path DO NOT forget to update the `environment` value in the agent values.yaml file. This value is used in the AGENT_INJECT_VAULT_AUTH_PATH.
 
 ```bash
 ❯ kubectl exec -ti vault-0 -n vault -- vault auth enable -path=<ENV> kubernetes
@@ -281,6 +263,24 @@ edit the following and command with `bound_service_account_namespaces=<NAMESPACE
         bound_service_account_namespaces='*' \
         policies=vault-agent-injector \
         ttl=24h
+```
+
+### Fetch secret
+
+### Cleanup
+
+- remove vault stack
+
+```bash
+❯ ./vk --delete --cluster=<APP_CLUSTER_NAME> --target=agent
+❯ ./vk --delete --cluster=<VAULT_CLUSTER_NAME> --target=vault
+```
+
+- remove clusters
+
+```bash
+❯ gcloud container clusters delete vault-cluster
+❯ gcloud container clusters delete app-cluster
 ```
 
 ## Production readiness
