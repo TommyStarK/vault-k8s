@@ -4,7 +4,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: vault-agent-injector-leader-elector-binding
-  namespace: default
+  namespace: vault
   labels:
     app.kubernetes.io/name: vault-agent-injector
     app.kubernetes.io/instance: vault
@@ -15,4 +15,4 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: vault-agent-injector
-  namespace: default
+  namespace: vault

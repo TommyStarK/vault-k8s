@@ -1,4 +1,4 @@
-namespace: default
+namespace: vault
 environment: test
 logLevel: debug
 version: "1.2.1"

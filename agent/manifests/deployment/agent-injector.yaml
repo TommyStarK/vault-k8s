@@ -4,7 +4,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: vault-agent-injector
-  namespace: default
+  namespace: vault
   labels:
     app.kubernetes.io/name: vault-agent-injector
     app.kubernetes.io/instance: vault
@@ -50,9 +50,9 @@ spec:
             - name: AGENT_INJECT_VAULT_IMAGE
               value: hashicorp/vault:1.13.1
             - name: AGENT_INJECT_TLS_AUTO
-              value: vault-agent-injector-cfg-default
+              value: vault-agent-injector-cfg-vault
             - name: AGENT_INJECT_TLS_AUTO_HOSTS
-              value: vault-agent-injector-svc,vault-agent-injector-svc.default,vault-agent-injector-svc.default.svc
+              value: vault-agent-injector-svc,vault-agent-injector-svc.vault,vault-agent-injector-svc.vault.svc
             - name: AGENT_INJECT_LOG_FORMAT
               value: standard
             - name: AGENT_INJECT_REVOKE_ON_SHUTDOWN
