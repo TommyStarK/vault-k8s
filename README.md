@@ -94,7 +94,6 @@ Pick 3 out of 5 unseal keys and export them like below:
 ❯ export VAULT_UNSEAL_KEY_1="X/LOC5Rp3xqj5hXx0WNKP3NEP7iTjev7nZu4odFowEnc"
 ❯ export VAULT_UNSEAL_KEY_2="+9w3RUIRQacDaA6OtQWpXinyzyxgI+ZnedyfM4WsK1VF"
 ❯ export VAULT_UNSEAL_KEY_3="nLQzt/CbMiGMUkpuD6lKtqYfB+wL7a6H41jqNM8TtI0r"
-[...]
 ```
 
 Let's unseal all nodes of our Vault cluster:
@@ -109,7 +108,7 @@ Finally let's check the cluster state:
 
 ```bash
 # Login first with root token
-❯ kubectl exec -ti -n vault vault-0 -- vault login s.RHFKyNsi3gmXuki9D6MZIAn3
+❯ kubectl exec -ti -n vault vault-0 -- vault login
 
 # Now we can list the cluster members
 ❯ kubectl exec -ti -n vault vault-0 -- vault operator raft list-peers
@@ -166,12 +165,6 @@ Before deploying the agent, we must update its [values.yaml](https://github.com/
 
 We retrieved it just before, we can update the `vault.endpoint` value with `http://34.91.249.155:8200`.
 
-Once it's done, render the template of the agent
-
-```bash
-❯ ./vk --render-template --target=agent
-```
-
 We can now proceed and deploy the Vault agent injector:
 
 ```bash
@@ -207,13 +200,13 @@ The Vault agent injector is now running, we need a few more steps before switchi
 We are ready to switch context and connect to the Vault cluster.
 We must now, configure the Vault cluster to authorize our "applicative" cluster and allow our vault agent to fetch specific secret(s).
 
-- Let's login into our Vault cluster:
+Let's login into our Vault cluster:
 
 ```bash
 ❯ kubectl exec -ti vault-0 -n vault -- vault login
 ```
 
-- We enable the auth Kubernetes method for a specific `<ENV>`. This way we could configure several Kubernetes clusters to access our Vault.
+We enable the auth Kubernetes method for a specific `<ENV>`. This way we could configure several Kubernetes clusters to access our Vault.
 For demo purposes we will use the path `demo`, Feel free to set what you want.
 
 :warning: We are going to replace `<ENV>` by `demo` in all following commands. If you wish to set another path DO NOT forget to update the `environment` value in the agent [values.yaml](https://github.com/TommyStarK/vault-k8s/blob/main/agent/values.yaml#L2). This value is used in the `AGENT_INJECT_VAULT_AUTH_PATH`.
@@ -222,21 +215,21 @@ For demo purposes we will use the path `demo`, Feel free to set what you want.
 ❯ kubectl exec -ti vault-0 -n vault -- vault auth enable -path=<ENV> kubernetes
 ```
 
-- Create a dedicated policy for the vault agent allowing access only for a subset of secrets:
+Create a dedicated policy for the vault agent allowing access only for a subset of secrets:
 
 ```bash
 ❯ kubectl exec -ti vault-0 -n vault -- vault policy write vault-agent-injector - <<EOF
-path "secret/metadata/<ENV>/*" {
+path "<ENV>/metadata/*" {
   capabilities = ["read", "list"]
 }
 
-path "secret/data/<ENV>/*" {
+path "<ENV>/data/*" {
   capabilities = ["read", "list"]
 }
 EOF
 ```
 
-- Configure the Kubernetes auth method with the information retrieved previously from our applicative cluster:
+Configure the Kubernetes auth method with the information retrieved previously from our applicative cluster:
 
 ```bash
 ❯ kubectl exec -ti vault-0 -n vault -- vault write auth/<ENV>/config \
@@ -246,7 +239,15 @@ EOF
         issuer="https://kubernetes.default.svc.cluster.local"
 ```
 
-- Create a Kubernetes auth role and bind it to the vault agent policy and service account:
+Create a Kubernetes auth role and bind it to the vault agent policy and service account:
+
+```bash
+❯ kubectl exec -ti vault-0 -n vault -- vault write auth/<ENV>/role/vault-agent-injector \
+        bound_service_account_names=vault-agent-injector \
+        bound_service_account_namespaces='*' \
+        policies=vault-agent-injector \
+        ttl=24h
+```
 
 :warning: The Vault agent injector is relying on its service account for being able to authenticate to our Vault. Service accounts are namespaced.
 
@@ -256,14 +257,6 @@ any namespace ([doc](https://www.vaultproject.io/api/auth/kubernetes#bound_servi
 
 If you wish to restrict access to a specific namespace you must
 edit the following and command with `bound_service_account_namespaces=<NAMESPACE>`.
-
-```bash
-❯ kubectl exec -ti vault-0 -n vault -- vault write auth/<ENV>/role/vault-agent-injector \
-        bound_service_account_names=vault-agent-injector \
-        bound_service_account_namespaces='*' \
-        policies=vault-agent-injector \
-        ttl=24h
-```
 
 ### Fetch secret
 
@@ -283,12 +276,6 @@ Then, create a secret:
 ❯ kubectl exec -ti vault-0 -n vault -- vault kv put demo/dummy DEMO_SECRET="this is secret"
 ```
 
-You can access the Vault UI by running the following command:
-
-```bash
-❯ open "http://$(kubectl get -n vault service vault-active| awk 'NR>1 {print $4}'):8200/ui"
-```
-
 Now switch context to interact with the "applicative" cluster.
 Let's deploy a demo app to test fetching secret from the Vault:
 
@@ -299,7 +286,7 @@ Let's deploy a demo app to test fetching secret from the Vault:
 Run this last command to ensure it is working :smile:
 
 ```bash
-❯ kubectl exec -ti -n vault $(kubectl get pod -n vault -l app=demo -o jsonpath="{.items[0].metadata.name}") -- env | grep DEMO_SECRET
+❯ kubectl logs -n vault $(kubectl get pod -n vault -l app=demo -o jsonpath="{.items[0].metadata.name}") -c demo
 DEMO_SECRET=this is secret
 ```
 
