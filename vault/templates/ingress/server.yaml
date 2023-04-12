@@ -27,5 +27,5 @@ spec:
   tls:
   - hosts:
     - {{ .Values.ingress.host }}
-    secretName: vault-tls
+    secretName: vault-gateway-tls
 {{ end }}

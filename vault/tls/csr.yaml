@@ -1,0 +1,14 @@
+apiVersion: certificates.k8s.io/v1
+kind: CertificateSigningRequest
+metadata:
+  name: vault-internal.svc
+spec:
+  groups:
+  - system:authenticated
+  signerName: kubernetes.io/kubelet-serving
+  expirationSeconds: 8640000
+  request: ''
+  usages:
+  - digital signature
+  - key encipherment
+  - server auth

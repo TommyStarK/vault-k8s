@@ -3,12 +3,10 @@ namespace: vault
 ingress:
   enable: false
   host: vault.cluster.com
-  tls:
-    mountPath: /vault/tls
 
 log:
   level: debug
-  format: json
+  format: standard
 
 server:
   maxRequestDuration: 30s

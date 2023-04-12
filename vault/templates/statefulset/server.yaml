@@ -59,6 +59,9 @@ spec:
         - name: config
           configMap:
             name: server-config
+        - name: tls
+          secret:
+            secretName: vault-tls
 {{ if eq .Values.storage.enable false }}
         - name: data
           emptyDir: {}
@@ -108,9 +111,9 @@ spec:
             - name: SKIP_SETCAP
               value: "true"
             - name: VAULT_ADDR
-              value: "http://127.0.0.1:8200"
+              value: "https://127.0.0.1:8200"
             - name: VAULT_API_ADDR
-              value: "http://$(POD_IP):8200"
+              value: "https://$(POD_IP):8200"
             - name: VAULT_CLUSTER_ADDR
               value: "https://$(HOSTNAME).vault-internal:8201"
             - name: VAULT_LOG_LEVEL
@@ -121,6 +124,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: VAULT_TLSCERT
+              value: /vault/tls/vault.crt
+            - name: VAULT_TLSKEY
+              value: /vault/tls/vault.key
+            - name: VAULT_CACERT
+              value: /vault/tls/vault.ca
           ports:
             - name: http
               containerPort: 8200
@@ -146,7 +155,7 @@ spec:
             httpGet:
               path: "/v1/sys/health?standbyok=true"
               port: 8200
-              scheme: HTTP
+              scheme: HTTPS
             failureThreshold: 2
             initialDelaySeconds: 60
             periodSeconds: 5
@@ -156,7 +165,7 @@ spec:
             httpGet:
               path: "/v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204"
               port: 8200
-              scheme: HTTP
+              scheme: HTTPS
             failureThreshold: 2
             initialDelaySeconds: 180
             periodSeconds: 5
@@ -180,3 +189,5 @@ spec:
               mountPath: /vault/data
             - name: home
               mountPath: /home/vault
+            - name: tls
+              mountPath: /vault/tls

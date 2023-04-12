@@ -1,6 +1,6 @@
 # vault-k8s
 
-`vault-k8s` is an attempt to ease the setup of a Vault cluster running on Kubernetes. The aim of this repository is to facilitate the deployment of a high availability 5 nodes Vault cluster using the Raft integrated storage. A tiny script `vk` whitin this repo will help to achieve that.
+`vault-k8s` is an attempt to ease the setup of a Vault cluster running on Kubernetes. The aim of this repository is to facilitate the deployment of a high availability 5 nodes Vault cluster using the Raft integrated storage with end-to-end TLS. A tiny script `vk` within this repo will help to achieve that.
 
 The idea is to have an ad-hoc, reproducible, configurable, extendable way of deploying a Vault cluster in a dedicated infrastructure. It also helps to deploy the agent injector on the Kubernetes cluster(s) of your choice, giving you the freedom to fetch secrets from your Vault and inject them before scheduling pods.
 
@@ -18,7 +18,7 @@ You will find a [section](https://github.com/TommyStarK/vault-k8s#production-rea
 
 ## Usage
 
-Feel free to edit the [values.yaml files](https://github.com/TommyStarK/vault-k8s/tree/main/vault/values.yaml) to fit to your needs.
+Feel free to edit the [Vault values.yaml file](https://github.com/TommyStarK/vault-k8s/tree/main/vault/values.yaml) to fit to your needs.
 
 ```bash
 ❯ ./vk -h
@@ -53,18 +53,70 @@ To demonstrate how to use `vault-k8s`, we will use [GKE](https://cloud.google.co
 
 For demo purposes, the Vault cluster will be deployed **WITHOUT** enabling data persistence, pod resources, ingress. See the [production readiness](https://github.com/TommyStarK/vault-k8s#production-readiness) section for more details regarding these topics.
 
+### TLS setup
+
+Generate the Vault server private key:
+
+```bash
+❯ openssl genrsa -out vault/tls/vault.key 2048
+```
+
+Generate the certificate signing request:
+
+```bash
+❯ openssl req -new -key vault/tls/vault.key -out vault/tls/vault.csr -config vault/tls/vault.conf
+```
+
+Encode the certificate signing request to base64:
+
+```bash
+❯ echo -n "$(cat vault/tls/vault.csr)" | base64 | tr -d '\n'
+```
+
+Copy/paste the output [here](https://github.com/TommyStarK/vault-k8s/blob/main/vault/tls/csr.yaml#L10).
+
 ### Cluster setup
 
 First step, let's create the dedicated Kubernetes cluster for Vault:
 
 ```bash
-❯ gcloud container clusters create vault-cluster --machine-type e2-standard-4 --disk-size 10
+❯ gcloud container clusters create vault-cluster --machine-type e2-standard-8
 ```
 
 Once the cluster is ready, create the `vault` namespace:
 
 ```bash
 ❯ kubectl create namespace vault
+```
+
+Send the certificate signing request to Kubernetes:
+
+```bash
+❯ kubectl apply -f vault/tls/csr.yaml
+```
+
+Approve the certificate signing request:
+
+```bash
+❯ kubectl certificate approve vault-internal.svc
+```
+
+Retrieve the certificate:
+
+```bash
+❯ kubectl get csr vault-internal.svc -o jsonpath='{.status.certificate}' | openssl base64 -d -A -out vault/tls/vault.crt
+```
+
+Retrieve the CA certificate:
+
+```bash
+❯ kubectl config view --raw --minify --flatten -o jsonpath='{.clusters[].cluster.certificate-authority-data}' | base64 -d > vault/tls/vault.ca
+```
+
+Create a Kubernetes secret holding the TLS artifacts:
+
+```bash
+❯ kubectl create secret generic vault-tls -n vault --from-file=vault.key=vault/tls/vault.key --from-file=vault.crt=vault/tls/vault.crt --from-file=vault.ca=vault/tls/vault.ca
 ```
 
 We can now proceed and deploy the Vault cluster:
@@ -146,7 +198,6 @@ First thing, the Vault cluster must be up, running and unsealed.
 Assuming this is the first time your are setting up the Kubernetes applicative cluster. We need first to deploy the vault agent injector.
 
 > When speaking about "applicative" cluster we mean the cluster holding your application.
-
 > Production hardenning requirements for Vault require to have a dedicated infrastucture for it. Therefore we are configuring the vault agent to connect to our external dedicated HA Vault cluster.
 
 Let's create the Kubernetes app cluster:
@@ -161,9 +212,9 @@ Once the cluster is ready, create the `vault` namespace:
 ❯ kubectl create namespace vault
 ```
 
-Before deploying the agent, we must update its [values.yaml](https://github.com/TommyStarK/vault-k8s/blob/main/agent/values.yaml#L10) with the endpoint of the Vault cluster. This way the agent will be able to communicate with it. For demo purposes, the Vault cluster has been deployed **WITHOUT** enabling Ingress so we use the `service LoadBalancer IP`.
+Before deploying the agent, we must update its [values.yaml](https://github.com/TommyStarK/vault-k8s/blob/main/agent/values.yaml#L10) with the endpoint of the Vault cluster. This way the agent will be able to communicate with it. For demo purposes, the Vault cluster has been deployed **WITHOUT** enabling ingress so we use the `service LoadBalancer IP`.
 
-We retrieved it just before, we can update the `vault.endpoint` value with `http://34.91.249.155:8200`.
+We retrieved it just before, we can update the `vault.endpoint` value with `https://34.91.249.155:8200`.
 
 We can now proceed and deploy the Vault agent injector:
 
@@ -287,7 +338,6 @@ Run this last command to ensure it is working :smile:
 
 ```bash
 ❯ kubectl logs -n vault $(kubectl get pod -n vault -l app=demo -o jsonpath="{.items[0].metadata.name}") -c demo
-DEMO_SECRET=this is secret
 ```
 
 ### Cleanup
@@ -308,21 +358,39 @@ DEMO_SECRET=this is secret
 
 ## Production readiness
 
+- [Vault security model](https://developer.hashicorp.com/vault/docs/internals/security)
 - [Vault production hardening](https://developer.hashicorp.com/vault/tutorials/operations/production-hardening)
 - [Kubernetes security consideration](https://developer.hashicorp.com/vault/tutorials/kubernetes/kubernetes-security-concerns)
-- [Performanace tuning](https://developer.hashicorp.com/vault/tutorials/operations/performance-tuning)
+- [Performance tuning](https://developer.hashicorp.com/vault/tutorials/operations/performance-tuning)
 - [Integrated storage vs external storage](https://developer.hashicorp.com/vault/docs/configuration/storage#integrated-storage-vs-external-storage)
 
 ### Ingress
 
 By default, ingress is disabled. `Vault` is accessible through Kubernetes `LoadBalancer`. There are prerequisites for being able to expose `HTTPS` route for this service.
 
-You must have an Ingress controller to satisfy an ingress. Please be sure you have [Ingress-NGINX Controller](https://github.com/kubernetes/ingress-nginx/) running in your cluster. Feel free to use the ingress controller of your choice, but do not forget to update the ingress
-template accordingly.
+You must have an Ingress controller to satisfy an ingress. Please be sure you have [Ingress-NGINX Controller](https://github.com/kubernetes/ingress-nginx/) running in your cluster. Feel free to use the ingress controller of your choice, but do not forget to update the ingress template accordingly.
 
 Follow the steps below if you want Vault to be accessible over `HTTPS` from outside the cluster.
 
-1. Add the certificate and key to the secret template (file is located under `vault/templates/secret/vault-tls.yaml`)
-2. Set the `ingress.enable` attribute to `true` in the according [values.yaml file](https://github.com/TommyStarK/vault-k8s/tree/main/vault/values.yaml)
-3. Set the `ingress.host` attribute with your domain in the according [values.yaml file](https://github.com/TommyStarK/vault-k8s/tree/main/vault/values.yaml)
-4. Render chart templates
+Let's assume your are using the following domain: `https://vault.cluster.com`
+
+- On Vault side:
+
+1. Add the certificate and key to the secret [template](https://github.com/TommyStarK/vault-k8s/blob/main/vault/templates/secret/vault-gateway-tls.yaml).
+2. Set the `ingress.enable` attribute to `true` in the according [values.yaml file](https://github.com/TommyStarK/vault-k8s/blob/main/vault/values.yaml#L4).
+3. Set the `ingress.host` attribute with your domain (vault.cluster.com) in the according [values.yaml file](https://github.com/TommyStarK/vault-k8s/blob/main/vault/values.yaml#L5).
+
+- On the agent injector side:
+
+1. Create a secret holding the CA certificate used to issue the certificate for `vault.cluster.com`.
+2. Update the [`vault.endpoint`](https://github.com/TommyStarK/vault-k8s/blob/main/agent/values.yaml#L10) with `https://vault.cluster.com`
+3. Comment this [line](https://github.com/TommyStarK/vault-k8s/blob/main/demo/demo.yaml#L19).
+4. Uncomment these [lines](https://github.com/TommyStarK/vault-k8s/blob/main/demo/demo.yaml#L20-L21).
+
+:warning: When creating the secret containing the CA certificate used to issue the certificate for `https://vault.cluster.com` be sure it matches the name used in the [annotation](https://github.com/TommyStarK/vault-k8s/blob/main/demo/demo.yaml#L20) and the secret name specified in the [annotation](https://github.com/TommyStarK/vault-k8s/blob/main/demo/demo.yaml#L21).
+
+For example, based on the `demo.yaml`:
+
+```bash
+❯ kubectl create secret generic vault-ca -n vault --from-file=vault.ca=<PATH_TO_CA_CERT>
+```
